@@ -4,24 +4,35 @@ An enterprise-grade IoT firmware for ESP32 microcontrollers designed to bridge i
 
 ---
 
-## 🏗️ Project Architecture & Modular Structure
+## 🏗️ Project Architecture & Folder Structure
 
-The project follows a clean, modular C++ architecture where distinct components are decoupled into dedicated header (`.h`) and implementation (`.cpp`) files:
+The project uses a clean C++ domain-driven folder hierarchy inside `src/`. **Every code file is tightly scoped and under 100 lines of code**:
 
 ```
 hermes/
-├── main.ino            # Main entry point (setup, loop, serial stream dispatch)
-├── html_pages.h        # Embedded Glassmorphic web portal HTML/CSS templates
-├── config_manager.h    # NVS Preferences storage interface
-├── config_manager.cpp  # Flash memory read/write logic
-├── scale_parser.h      # Weight stabilization state machine interface
-├── scale_parser.cpp    # Weight processing & stability threshold algorithm
-├── supabase_client.h   # Supabase cloud REST client interface
-├── supabase_client.cpp # JWT authentication & POST payload execution
-├── wifi_portal.h       # Access Point & WebServer route headers
-├── wifi_portal.cpp     # AP WebServer routes & WiFi station connector
-├── ota_updater.h       # Over-The-Air firmware updater interface
-└── ota_updater.cpp     # Remote GitHub firmware version check & flash logic
+├── main.ino                   # Sketch entry point (setup, loop, stream dispatch - 80 lines)
+├── README.md
+└── src/
+    ├── config/
+    │   ├── config_manager.h   # Flash NVS settings header
+    │   └── config_manager.cpp # Flash NVS Preferences read/write logic (46 lines)
+    ├── scale/
+    │   ├── scale_parser.h     # Weight stabilization state machine header
+    │   └── scale_parser.cpp   # Scale stream parsing & stability algorithm (52 lines)
+    ├── network/
+    │   ├── supabase_auth.h    # Supabase Auth JWT header
+    │   ├── supabase_auth.cpp  # Login & Profile ID resolution (85 lines)
+    │   ├── supabase_post.h    # REST weighment post header
+    │   └── supabase_post.cpp  # JSON payload POST execution (49 lines)
+    ├── portal/
+    │   ├── wifi_portal.h      # AP Access Point & WebServer header
+    │   └── wifi_portal.cpp    # WebServer routes & WiFi connection (94 lines)
+    ├── ota/
+    │   ├── ota_updater.h      # HTTP OTA updater header
+    │   └── ota_updater.cpp    # Remote GitHub version check & flash logic (46 lines)
+    └── ui/
+        ├── config_page.h      # Glassmorphic Portal HTML page template
+        └── save_page.h        # Confirmation & Reboot HTML page template
 ```
 
 ---
@@ -52,80 +63,6 @@ The ESP32 communicates with the industrial weight scale indicator via HardwareSe
 | **GPIO 17** | `TX2` | Indicator RX (Optional) |
 | **GND** | Ground | Common Ground |
 
-### Serial Communication Parameters
-- **Baud Rate**: `1200 Baud`
-- **Data Bits**: `8`
-- **Parity**: `None` (`SERIAL_8N1`)
-- **Stop Bits**: `1`
-
----
-
-## 🔄 System Architecture & State Machine
-
-```mermaid
-stateDiagram-v2
-    [*] --> STATE_INIT
-    STATE_INIT --> STATE_AP_MODE: Boot / Force AP Config Mode
-    STATE_AP_MODE --> Web_Portal: Serve Glassmorphic Portal (192.168.4.1)
-    Web_Portal --> Save_Settings: Operator Inputs Credentials & Submits
-    Save_Settings --> Connect_WiFi: Write Flash & Disable AP
-    Connect_WiFi --> STATE_CONNECTED_NORMAL: Connected Successfully
-    Connect_WiFi --> STATE_AP_MODE: Connection Failed (Fallback)
-    
-    state STATE_CONNECTED_NORMAL {
-        [*] --> SCALE_IDLE
-        SCALE_IDLE --> SCALE_STABILIZING: Weight >= Threshold
-        SCALE_STABILIZING --> SCALE_STABLE_RECORDED: Weight Stable for 10s
-        SCALE_STABLE_RECORDED --> Supabase_POST: Send REST Payload
-        SCALE_STABLE_RECORDED --> SCALE_IDLE: Weight <= 0.0 (Session End)
-    }
-```
-
----
-
-## 📡 Web Portal Configuration
-
-On boot, the ESP32 activates Access Point mode with a unique SSID prefix based on its MAC address:
-- **Default Access Point SSID**: `Gluvok_WeighTrix_XXXX`
-- **AP Password**: None (Open network for quick field setup)
-- **Configuration Portal Web Page**: `http://192.168.4.1`
-
-### Configurable Parameters
-| Parameter | Description | Flash Key |
-| :--- | :--- | :--- |
-| **Wi-Fi SSID** | Target local Wi-Fi network name | `ssid` |
-| **Wi-Fi Password** | Target Wi-Fi network password | `password` |
-| **Operator Email** | Supabase Auth user email | `sb_email` |
-| **Operator Password** | Supabase Auth user password | `sb_pass` |
-| **Center ID** | Weighment center / station identifier | `center_id` |
-| **Min Weight Threshold** | Minimum weight threshold to start a session (kg) | `min_weight` |
-
----
-
-## ☁️ Supabase Cloud & Database Integration
-
-### 1. Authentication (`loginToSupabase`)
-Authenticates via `POST /auth/v1/token?grant_type=password` using operator email and password. Receives a JWT access token cached in RAM (`auth_token`).
-
-### 2. Operator Profile Resolution (`fetchProfileId`)
-Queries Supabase REST API (`/rest/v1/profiles` or fallback `/rest/v1/operators`) to dynamically resolve the `profile_id` associated with the logged-in operator.
-
-### 3. Weighment Logging (`postToSupabase`)
-Sends an authenticated `POST` request to `/rest/v1/weighments`:
-
-```json
-{
-  "weight": 150.250,
-  "vehicle_number": "MH12AB4821",
-  "rate_id": 1,
-  "center_id": 1,
-  "profile_id": 5,
-  "customer_id": 1
-}
-```
-
-If HTTP `401` or `403` occurs, the firmware clears `auth_token` and automatically retries authentication.
-
 ---
 
 ## 🚀 Compilation & Flashing Instructions
@@ -133,14 +70,6 @@ If HTTP `401` or `403` occurs, the firmware clears `auth_token` and automaticall
 ### Prerequisites
 - **Arduino IDE** (v2.0+) or **PlatformIO**
 - **ESP32 Board Package**: Installed via Arduino Board Manager (`esp32` by Expressif Systems)
-
-### Core Libraries (Built-in to ESP32 core)
-- `WiFi.h`
-- `WebServer.h`
-- `Preferences.h`
-- `HTTPClient.h`
-- `HTTPUpdate.h`
-- `WiFiClientSecure.h`
 
 ---
 

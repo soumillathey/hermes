@@ -2,25 +2,24 @@
  * ESP32 Wi-Fi Configuration Portal & Cloud Supabase Data Logger
  * Gluvok by Lathey Weigh Trix
  *
- * Modularized Architecture:
- *  - html_pages.h: Glassmorphic HTML web UI templates
- *  - config_manager.h/.cpp: Non-Volatile Flash (NVS Preferences) storage
- *  - scale_parser.h/.cpp: UART indicator parsing & weight stability state machine
- *  - supabase_client.h/.cpp: Supabase Auth JWT login & REST weighment upload
- *  - wifi_portal.h/.cpp: AP mode, station connection, WebServer routes
- *  - ota_updater.h/.cpp: Over-The-Air firmware updates
+ * Folder Structure:
+ *  - src/config/  : Flash NVS Preferences storage manager
+ *  - src/scale/   : UART scale stream parser & stability state machine
+ *  - src/network/ : Supabase Auth JWT login & REST weighment payload upload
+ *  - src/portal/  : Access Point WebServer & Station WiFi connector
+ *  - src/ota/     : Over-The-Air firmware updater
+ *  - src/ui/      : Embedded HTML Web Portal pages
  */
 
-#include "config_manager.h"
-#include "ota_updater.h"
-#include "scale_parser.h"
-#include "supabase_client.h"
-#include "wifi_portal.h"
+#include "src/config/config_manager.h"
+#include "src/ota/ota_updater.h"
+#include "src/scale/scale_parser.h"
+#include "src/network/supabase_auth.h"
+#include "src/network/supabase_post.h"
+#include "src/portal/wifi_portal.h"
 
-// Hardware Serial object for scale indicator
 HardwareSerial Indicator(2);
 
-// Stream parsing state
 static String digitBuffer = "";
 static bool isNegative = false;
 static unsigned long lastWifiCheckTime = 0;
@@ -33,25 +32,16 @@ void setup() {
   Serial.printf("Device MAC Address: %s\n", WiFi.macAddress().c_str());
   Serial.println("==============================================");
 
-  // Initialize UART2 for Weight Indicator (1200 Baud 8N1, RX=16, TX=17)
   Indicator.begin(1200, SERIAL_8N1, 16, 17);
-  Serial.println("Indicator listening on UART2 (pins 16/RX, 17/TX) at 1200 baud...");
-
-  // Load configured settings from non-volatile flash storage
   loadSettings();
-
-  // Force AP Config Mode on boot
-  Serial.println("Forcing AP Config Mode on startup.");
   startAPMode();
 
   lastWifiCheckTime = millis();
 }
 
 void loop() {
-  // Handle Web Server requests
   server.handleClient();
 
-  // Read scale indicator UART stream
   while (Indicator.available()) {
     char c = (char)Indicator.read();
     
@@ -73,17 +63,14 @@ void loop() {
     }
   }
 
-  // Normal operational tasks
   if (currentState == STATE_CONNECTED_NORMAL) {
     unsigned long currentMillis = millis();
 
-    // WiFi auto-reconnect check
     if (currentMillis - lastWifiCheckTime >= WIFI_CHECK_INTERVAL) {
       lastWifiCheckTime = currentMillis;
       autoReconnectWiFi();
     }
 
-    // OTA update check
     if (currentMillis - lastOtaCheckTime >= OTA_CHECK_INTERVAL) {
       lastOtaCheckTime = currentMillis;
       checkForUpdates();

@@ -3,7 +3,7 @@
 
 #include <Arduino.h>
 
-const unsigned long OTA_CHECK_INTERVAL = 3600000; // Check every 1 hour (in ms)
+extern const unsigned long OTA_CHECK_INTERVAL;
 extern unsigned long lastOtaCheckTime;
 
 void checkForUpdates();

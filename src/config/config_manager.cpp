@@ -1,6 +1,6 @@
 #include "config_manager.h"
+#include <Preferences.h>
 
-// Global Stored Parameter Definitions
 String wifi_ssid = "";
 String wifi_password = "";
 int supabase_center_id = 1;
@@ -9,11 +9,10 @@ String supabase_email = "";
 String supabase_password = "";
 int supabase_profile_id = -1;
 
-// Global Preferences object
 static Preferences preferences;
 
 void loadSettings() {
-  preferences.begin("supabase-cfg", true); // Read-only mode
+  preferences.begin("supabase-cfg", true);
 
   wifi_ssid = preferences.getString("ssid", "");
   wifi_password = preferences.getString("password", "");
@@ -33,7 +32,7 @@ void loadSettings() {
 
 void saveSettings(String ssid, String pass, int centerId, double minWeight, 
                   String sbEmail, String sbPass) {
-  preferences.begin("supabase-cfg", false); // Read/write mode
+  preferences.begin("supabase-cfg", false);
 
   preferences.putString("ssid", ssid);
   preferences.putString("password", pass);
