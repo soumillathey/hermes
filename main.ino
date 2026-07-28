@@ -1,15 +1,14 @@
 /**
- * ESP32 Wi-Fi Configuration Portal & Cloud Firestore Data Logger
+ * ESP32 Wi-Fi Configuration Portal & Cloud Supabase Data Logger
+ * Gluvok by Lathey Weigh Trix
  *
  * Features:
- *  - ESP32 Access Point (AP) mode with a styled configuration portal.
- *  - Premium Glassmorphic Web UI to input credentials and Cloud Firestore
- * parameters.
+ *  - ESP32 Access Point (AP) mode with a styled glassmorphic configuration portal.
  *  - Permanent settings storage using ESP32 Preferences (NVS Flash).
- *  - Non-blocking loop structure for Wi-Fi reconnection and client server
- * logic.
- *  - Automated random mock data generation every 10 seconds.
- *  - Direct HTTPS REST POST requests to Google Cloud Firestore database.
+ *  - Non-blocking loop structure for Wi-Fi reconnection and UART indicator parsing.
+ *  - Automated vehicle mock generation and Supabase Auth JWT authentication.
+ *  - Weight scale stability detection and REST POST logging.
+ *  - Remote HTTP OTA firmware updates via GitHub releases.
  */
 
 #include <HTTPClient.h>
@@ -18,14 +17,15 @@
 #include <WebServer.h>
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
+#include <esp_system.h>
+
+#include "html_pages.h" // Embedded Glassmorphic Configuration Portal HTML templates
 
 // --- Configuration Constants ---
-const char *AP_SSID_PREFIX =
-    "Gluvok_WeighTrix_";      // Suffix will be generated from MAC address
-const char *AP_PASSWORD = ""; // Open network for configuration simplicity
+const char *AP_SSID_PREFIX = "Gluvok_WeighTrix_"; // Suffix generated from MAC address
+const char *AP_PASSWORD = "";                      // Open AP network for setup
 const int WEB_SERVER_PORT = 80;
-const unsigned long DATA_POST_INTERVAL = 10000;  // 10 seconds in milliseconds
-const unsigned long WIFI_CHECK_INTERVAL = 20000; // 20 seconds in milliseconds
+const unsigned long WIFI_CHECK_INTERVAL = 20000;  // Wi-Fi check interval (20s)
 
 // --- Global Objects ---
 WebServer server(WEB_SERVER_PORT);
@@ -33,9 +33,9 @@ Preferences preferences;
 HardwareSerial Indicator(2);
 
 // --- Weight Indicator State & Stability Settings ---
-double supabase_weight_threshold = 50.0;     // Configurable minimum weight to trigger a weighment (default: 50.0)
-const double STABILITY_TOLERANCE = 2.0;      // Allowed fluctuation range
-const unsigned long STABILITY_DURATION = 10000; // Required time to stabilize (ms)
+double supabase_weight_threshold = 50.0;        // Minimum weight to trigger weighment (default: 50.0)
+const double STABILITY_TOLERANCE = 2.0;         // Allowed weight fluctuation range
+const unsigned long STABILITY_DURATION = 10000; // Time required for weight stabilization (ms)
 
 enum ScaleState {
   SCALE_IDLE,
@@ -56,10 +56,10 @@ SystemState currentState = STATE_INIT;
 // --- Stored Parameters ---
 String wifi_ssid = "";
 String wifi_password = "";
-int supabase_center_id = 1;  // Default center ID
+int supabase_center_id = 1;      // Default center ID
 String supabase_email = "";
 String supabase_password = "";
-int supabase_profile_id = -1; // Dynamically resolved operator ID
+int supabase_profile_id = -1;    // Dynamically resolved operator ID
 
 // --- Supabase System Constants ---
 const String supabase_url = "https://mjrpqoinwkssmzlimwaz.supabase.co";
@@ -74,7 +74,6 @@ const int supabase_rate_id     = 1;
 const int supabase_customer_id = 1;
 
 // --- Timer Tracking Variables ---
-unsigned long lastDataPostTime = 0;
 unsigned long lastWifiCheckTime = 0;
 
 // --- OTA Firmware Configuration ---
@@ -82,334 +81,6 @@ const String CURRENT_VERSION = "1.0.2";
 const String OTA_VERSION_URL = "https://raw.githubusercontent.com/SoumilLathey/gluvok-hardware-ota/main/firmware/version.json";
 const unsigned long OTA_CHECK_INTERVAL = 3600000; // Check every 1 hour (in ms)
 unsigned long lastOtaCheckTime = 0;
-
-// --- HTML Templates ---
-// Beautiful Glassmorphic Configuration Page (Dark Theme)
-const char CONFIG_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gluvok by Lathey Weigh Trix Portal</title>
-    <style>
-        :root {
-            --bg-color: #030712;
-            --card-bg: rgba(17, 24, 39, 0.7);
-            --text-color: #9ca3af;
-            --text-title: #ffffff;
-            --accent-primary: #3b82f6;
-            --accent-secondary: #60a5fa;
-            --accent-glow: rgba(59, 130, 246, 0.4);
-            --border-color: rgba(255, 255, 255, 0.05);
-            --input-bg: rgba(31, 41, 55, 0.85);
-            --success-color: #10b981;
-        }
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-        body {
-            background: linear-gradient(135deg, #0b1528 0%, #030712 100%);
-            color: var(--text-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            width: 100%;
-            max-width: 460px;
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 35px 30px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.05);
-            animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-        @keyframes slideUp {
-            from { opacity: 0; transform: translateY(30px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        .header {
-            text-align: center;
-            margin-bottom: 28px;
-        }
-        .status-badge {
-            display: inline-flex;
-            align-items: center;
-            background: rgba(59, 130, 246, 0.12);
-            color: #93c5fd;
-            padding: 5px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            margin-bottom: 16px;
-            border: 1px solid rgba(59, 130, 246, 0.25);
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-        }
-        .status-dot {
-            width: 7px;
-            height: 7px;
-            background-color: #3b82f6;
-            border-radius: 50%;
-            margin-right: 8px;
-            animation: pulse 1.8s infinite;
-        }
-        @keyframes pulse {
-            0% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.7); }
-            70% { transform: scale(1.1); opacity: 1; box-shadow: 0 0 0 5px rgba(59, 130, 246, 0); }
-            100% { transform: scale(0.95); opacity: 0.5; box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
-        }
-        .logo-container {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            margin-bottom: 18px;
-        }
-        .logo-svg {
-            max-width: 280px;
-            height: auto;
-        }
-        .header p {
-            font-size: 13.5px;
-            color: #7b7e85;
-            line-height: 1.4;
-        }
-        .section-title {
-            font-size: 12px;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            color: var(--accent-primary);
-            margin: 24px 0 12px 0;
-            border-bottom: 1px solid rgba(255, 107, 107, 0.2);
-            padding-bottom: 6px;
-        }
-        .form-group {
-            margin-bottom: 18px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 7px;
-            font-size: 11px;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: #8c8f96;
-        }
-        .form-group input {
-            width: 100%;
-            padding: 11px 14px;
-            background: var(--input-bg);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 10px;
-            color: var(--text-title);
-            font-size: 14.5px;
-            transition: all 0.25s ease;
-            outline: none;
-        }
-        .form-group input:focus {
-            border-color: var(--accent-primary);
-            box-shadow: 0 0 10px var(--accent-glow);
-            background: rgba(10, 10, 15, 0.95);
-        }
-        .btn-submit {
-            width: 100%;
-            padding: 13px;
-            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
-            border: none;
-            border-radius: 10px;
-            color: #ffffff;
-            font-size: 15px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.25s ease;
-            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.3);
-            letter-spacing: 0.5px;
-            margin-top: 8px;
-        }
-        .btn-submit:hover {
-            transform: translateY(-1.5px);
-            box-shadow: 0 6px 20px rgba(255, 107, 107, 0.45);
-            filter: brightness(1.1);
-        }
-        .btn-submit:active {
-            transform: translateY(0);
-        }
-        .footer {
-            margin-top: 25px;
-            text-align: center;
-            font-size: 11px;
-            color: #5b5c61;
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="status-badge">
-                <span class="status-dot"></span>
-                <span>Config Mode Active</span>
-            </div>
-            <div class="logo-container">
-                <svg class="logo-svg" viewBox="0 0 300 70" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <!-- Hexagon Left/Bottom G (Vibrant Blue #3b82f6) -->
-                    <path d="M 28 10 L 8 21.5 L 8 49 L 28 60.5 L 48 49 L 48 41 L 38 41 L 38 45 L 28 51 L 18 45 L 18 25.5 L 28 20 L 38 25.5 L 38 31 L 28 31 L 28 39 L 48 39 L 48 21.5 Z" fill="#3b82f6" />
-                    <!-- Hexagon Top Right L (Light Blue #93c5fd) -->
-                    <path d="M 33 6 L 48 14.5 L 48 31 L 41 27 L 41 18.5 L 33 14 Z" fill="#93c5fd" />
-                    <!-- Vertical Divider -->
-                    <line x1="64" y1="8" x2="64" y2="62" stroke="rgba(255, 255, 255, 0.15)" stroke-width="2" />
-                    <!-- Text GLUVOK -->
-                    <text x="76" y="38" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="800" font-size="28" fill="#ffffff" letter-spacing="3">GLUVOK</text>
-                    <!-- Text BY LATHEY WEIGH TRIX -->
-                    <text x="76" y="56" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-weight="600" font-size="9" fill="#93c5fd" letter-spacing="1.5">BY LATHEY WEIGH TRIX</text>
-                </svg>
-            </div>
-            <p>Setup local Wi-Fi and Operator details</p>
-        </div>
-        <form action="/save" method="POST">
-            <div class="section-title">Wi-Fi Settings</div>
-            <div class="form-group">
-                <label for="ssid">Wi-Fi Network SSID</label>
-                <input type="text" id="ssid" name="ssid" placeholder="Wi-Fi SSID" required value="%SSID%">
-            </div>
-            <div class="form-group">
-                <label for="password">Wi-Fi Password</label>
-                <input type="password" id="password" name="password" placeholder="••••••••" value="%PASSWORD%">
-            </div>
-
-            <div class="section-title">Operator Login Credentials</div>
-            <div class="form-group">
-                <label for="sb_email">Operator Email</label>
-                <input type="email" id="sb_email" name="sb_email" placeholder="operator@example.com" required value="%SB_EMAIL%">
-            </div>
-            <div class="form-group">
-                <label for="sb_password">Operator Password</label>
-                <input type="password" id="sb_password" name="sb_password" placeholder="••••••••" required value="%SB_PASSWORD%">
-            </div>
-
-            <div class="section-title">Scale Parameters</div>
-            <div class="form-group">
-                <label for="center_id">Center ID</label>
-                <input type="number" id="center_id" name="center_id" placeholder="e.g. 1" required value="%CENTER_ID%">
-            </div>
-            <div class="form-group">
-                <label for="min_weight">Min Weight Threshold (kg)</label>
-                <input type="number" step="0.1" id="min_weight" name="min_weight" placeholder="e.g. 50.0" required value="%MIN_WEIGHT%">
-            </div>
-            <button type="submit" class="btn-submit">Apply Configuration</button>
-        </form>
-        <div class="footer">
-            Device MAC: <span style="font-family: monospace; color: #ff8e8e;">%MAC%</span>
-        </div>
-    </div>
-</body>
-</html>
-)rawliteral";
-
-// Beautiful Saving/Rebooting Page
-const char SAVE_HTML[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Applying Configurations</title>
-    <style>
-        :root {
-            --bg-color: #0b0c10;
-            --card-bg: rgba(30, 30, 38, 0.7);
-            --text-color: #c5c6c7;
-            --text-title: #ffffff;
-            --accent-primary: #00e676;
-            --border-color: rgba(255, 255, 255, 0.08);
-        }
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-        }
-        body {
-            background: linear-gradient(135deg, #091a10 0%, #06060c 100%);
-            color: var(--text-color);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-        .container {
-            width: 100%;
-            max-width: 440px;
-            backdrop-filter: blur(16px);
-            background: var(--card-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 24px;
-            padding: 40px 30px;
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.6);
-            text-align: center;
-        }
-        .badge {
-            background: rgba(0, 230, 118, 0.12);
-            color: var(--accent-primary);
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 600;
-            display: inline-block;
-            margin-bottom: 20px;
-            border: 1px solid rgba(0, 230, 118, 0.25);
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-        h1 {
-            color: var(--text-title);
-            font-size: 24px;
-            font-weight: 700;
-            margin-bottom: 12px;
-            background: linear-gradient(135deg, #ffffff 40%, #a3ffcc 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-        p {
-            font-size: 14px;
-            line-height: 1.5;
-            color: #8a8f98;
-            margin-bottom: 24px;
-        }
-        .spinner {
-            width: 44px;
-            height: 44px;
-            border: 3px solid rgba(0, 230, 118, 0.1);
-            border-top: 3px solid var(--accent-primary);
-            border-radius: 50%;
-            margin: 0 auto;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="badge">Success</div>
-        <h1>Settings Saved</h1>
-        <p>The configuration has been written to flash. Gluvok by Lathey Weigh Trix will now connect to <b>%SSID%</b>.</p>
-        <div class="spinner"></div>
-    </div>
-</body>
-</html>
-)rawliteral";
 
 // --- Forward Declarations ---
 void loadSettings();
@@ -437,10 +108,7 @@ void setup() {
   Serial.printf("Device MAC Address: %s\n", WiFi.macAddress().c_str());
   Serial.println("==============================================");
 
-  // Initialize random seed
-  randomSeed(analogRead(0));
-
-  // Initialize UART2 for Weight Indicator
+  // Initialize UART2 for Weight Indicator (1200 Baud 8N1, RX=16, TX=17)
   Indicator.begin(1200, SERIAL_8N1, 16, 17);
   Serial.println("Indicator listening on UART2 (pins 16/RX, 17/TX) at 1200 baud...");
 
@@ -451,7 +119,6 @@ void setup() {
   Serial.println("Forcing AP Config Mode on startup.");
   startAPMode();
 
-  lastDataPostTime = millis();
   lastWifiCheckTime = millis();
 }
 
@@ -467,10 +134,10 @@ void loop() {
     if (c == '-') {
       isNegative = true;
       digitBuffer = "";
-    } else if (isDigit(c)) {
+    } else if (isDigit(c) || c == '.') {
       digitBuffer += c;
     } else {
-      if (digitBuffer.length() >= 5 && digitBuffer.length() <= 6) {
+      if (digitBuffer.length() >= 1 && digitBuffer.length() <= 10) {
         double parsedVal = digitBuffer.toDouble();
         if (isNegative) {
           parsedVal = -parsedVal;
@@ -588,8 +255,7 @@ bool connectToWiFi() {
     Serial.println(WiFi.localIP());
     return true;
   } else {
-    Serial.println(
-        "\nConnection Timeout. Check credentials or network signal.");
+    Serial.println("\nConnection Timeout. Check credentials or network signal.");
     return false;
   }
 }
@@ -598,10 +264,7 @@ bool connectToWiFi() {
 void autoReconnectWiFi() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("Wi-Fi disconnected! Triggering reconnect sequence...");
-    // Let driver attempt background reconnection
-    // If it stays disconnected, print status
-    Serial.printf("Current connection status: %d (WL_CONNECTED = 3)\n",
-                  WiFi.status());
+    Serial.printf("Current connection status: %d (WL_CONNECTED = 3)\n", WiFi.status());
   }
 }
 
@@ -624,6 +287,7 @@ void setupWebServer() {
 // --- Serves Configuration Web Portal ---
 void handleRoot() {
   String html = String(CONFIG_HTML);
+  html.reserve(sizeof(CONFIG_HTML) + 128);
 
   // Bind stored configurations to input values
   html.replace("%SSID%", wifi_ssid);
@@ -646,12 +310,16 @@ void handleSave() {
       server.hasArg("sb_email") && server.hasArg("sb_password")) {
     
     String input_ssid = server.arg("ssid");
+    input_ssid.trim();
     String input_pass = server.arg("password");
+    input_pass.trim();
     int input_centerId = server.arg("center_id").toInt();
     double input_minWeight = server.arg("min_weight").toDouble();
     
     String input_sbEmail = server.arg("sb_email");
+    input_sbEmail.trim();
     String input_sbPass = server.arg("sb_password");
+    input_sbPass.trim();
 
     // Write parameters to Flash Memory
     saveSettings(input_ssid, input_pass, input_centerId, input_minWeight,
@@ -710,7 +378,7 @@ bool loginToSupabase() {
   Serial.println("[Auth] Attempting login to Supabase...");
 
   WiFiClientSecure secureClient;
-  secureClient.setInsecure(); // Bypass certificate validation
+  secureClient.setInsecure(); // Bypass certificate validation for HTTPS
 
   HTTPClient http;
   if (http.begin(secureClient, loginUrl)) {
@@ -719,7 +387,7 @@ bool loginToSupabase() {
     http.addHeader("apikey", supabase_key); // Required for routing in Supabase Gateway
     http.addHeader("Connection", "close");
 
-    // Construct body
+    // Construct JSON payload
     String authPayload = "{\"email\":\"" + supabase_email + "\",\"password\":\"" + supabase_password + "\"}";
     int httpResponseCode = http.POST(authPayload);
 
@@ -821,10 +489,8 @@ void postToSupabase(double weightValue) {
     return;
   }
 
-  if (supabase_url.length() == 0 || supabase_table.length() == 0 ||
-      supabase_key.length() == 0) {
-    Serial.println("[Supabase] POST skipped: Supabase URL, Key, or Table is "
-                   "not configured.");
+  if (supabase_url.length() == 0 || supabase_table.length() == 0 || supabase_key.length() == 0) {
+    Serial.println("[Supabase] POST skipped: Supabase URL, Key, or Table is not configured.");
     return;
   }
 
@@ -843,14 +509,14 @@ void postToSupabase(double weightValue) {
   }
   fullUrl += "rest/v1/" + supabase_table;
 
-  Serial.printf("[Supabase] Starting POST request to URL: %s\n",
-                fullUrl.c_str());
+  Serial.printf("[Supabase] Starting POST request to URL: %s\n", fullUrl.c_str());
 
   WiFiClientSecure secureClient;
   secureClient.setInsecure(); // Bypass root Certificate validation
 
-  // Generate mock vehicle number (max 10 characters due to varchar(10) database limit)
-  String vehicleNum = "MH12AB" + String(random(1000, 9999));
+  // Generate mock vehicle number using ESP32 Hardware RNG
+  uint32_t randomNum = 1000 + (esp_random() % 9000);
+  String vehicleNum = "MH12AB" + String(randomNum);
 
   // Build Supabase JSON Payload
   String jsonPayload = "{";
@@ -1045,5 +711,3 @@ void checkForUpdates() {
     Serial.println("[OTA] Connection to version check URL failed.");
   }
 }
-
-// (End of file)
