@@ -4,6 +4,28 @@ An enterprise-grade IoT firmware for ESP32 microcontrollers designed to bridge i
 
 ---
 
+## 🏗️ Project Architecture & Modular Structure
+
+The project follows a clean, modular C++ architecture where distinct components are decoupled into dedicated header (`.h`) and implementation (`.cpp`) files:
+
+```
+hermes/
+├── main.ino            # Main entry point (setup, loop, serial stream dispatch)
+├── html_pages.h        # Embedded Glassmorphic web portal HTML/CSS templates
+├── config_manager.h    # NVS Preferences storage interface
+├── config_manager.cpp  # Flash memory read/write logic
+├── scale_parser.h      # Weight stabilization state machine interface
+├── scale_parser.cpp    # Weight processing & stability threshold algorithm
+├── supabase_client.h   # Supabase cloud REST client interface
+├── supabase_client.cpp # JWT authentication & POST payload execution
+├── wifi_portal.h       # Access Point & WebServer route headers
+├── wifi_portal.cpp     # AP WebServer routes & WiFi station connector
+├── ota_updater.h       # Over-The-Air firmware updater interface
+└── ota_updater.cpp     # Remote GitHub firmware version check & flash logic
+```
+
+---
+
 ## 🌟 Key Features
 
 - **Styled Glassmorphic Configuration Portal**: Built-in Access Point (AP) mode serving an embedded responsive web UI for setting up Wi-Fi network credentials, operator login details, center IDs, and minimum weight thresholds.
@@ -58,12 +80,6 @@ stateDiagram-v2
         SCALE_STABLE_RECORDED --> SCALE_IDLE: Weight <= 0.0 (Session End)
     }
 ```
-
-### Weight Stabilization Algorithm
-1. **Idle State (`SCALE_IDLE`)**: Scale waits for parsed weight to cross the configured minimum threshold (default: `50.0 kg`).
-2. **Stabilizing State (`SCALE_STABILIZING`)**: Timer starts (`stableStartTime`). If weight stays within `±2.0 kg` (`STABILITY_TOLERANCE`) for at least 10 seconds (`STABILITY_DURATION`), the reading is marked stable.
-3. **Recorded State (`SCALE_STABLE_RECORDED`)**: Uploads the weighment payload to Supabase and locks further uploads for the current vehicle/session.
-4. **Session Reset**: Resets to `SCALE_IDLE` when weight returns to `0.0 kg` or below.
 
 ---
 
@@ -125,29 +141,6 @@ If HTTP `401` or `403` occurs, the firmware clears `auth_token` and automaticall
 - `HTTPClient.h`
 - `HTTPUpdate.h`
 - `WiFiClientSecure.h`
-
-### Board Settings (Arduino IDE)
-- **Board**: `ESP32 Dev Module`
-- **Flash Size**: `4MB (32Mb)`
-- **Partition Scheme**: `Default 4MB with spiffs (1.2MB APP / 1.5MB SPIFFS)` or `Minimal SPIFFS (1.9MB APP)`
-- **PSRAM**: Disabled
-- **Upload Speed**: `921600` or `115200`
-
----
-
-## 🏷️ OTA Firmware Updates
-
-Firmware updates are automatically fetched from GitHub Releases:
-- **Version Manifest URL**: `https://raw.githubusercontent.com/SoumilLathey/gluvok-hardware-ota/main/firmware/version.json`
-- **Check Frequency**: Every 1 hour (`3600000 ms`)
-
-### Manifest Structure Example (`version.json`)
-```json
-{
-  "version": "1.0.3",
-  "url": "https://raw.githubusercontent.com/SoumilLathey/gluvok-hardware-ota/main/firmware/firmware_v1.0.3.bin"
-}
-```
 
 ---
 

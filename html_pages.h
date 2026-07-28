@@ -4,7 +4,7 @@
 #include <Arduino.h>
 
 // Glassmorphic Configuration Page (Dark Theme)
-const char CONFIG_HTML[] PROGMEM = R"rawliteral(
+static const char CONFIG_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -229,7 +229,7 @@ const char CONFIG_HTML[] PROGMEM = R"rawliteral(
 )rawliteral";
 
 // Saving / Rebooting Confirmation Page
-const char SAVE_HTML[] PROGMEM = R"rawliteral(
+static const char SAVE_HTML[] PROGMEM = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
