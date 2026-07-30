@@ -73,18 +73,17 @@ static const char SAVE_HTML[] PROGMEM = R"rawliteral(
             color: #8a8f98;
             margin-bottom: 24px;
         }
-        .spinner {
-            width: 44px;
-            height: 44px;
-            border: 3px solid rgba(0, 230, 118, 0.1);
-            border-top: 3px solid var(--accent-primary);
+        .icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(0, 230, 118, 0.12);
+            border: 2px solid rgba(0, 230, 118, 0.4);
             border-radius: 50%;
             margin: 0 auto;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 26px;
         }
     </style>
 </head>
@@ -93,7 +92,7 @@ static const char SAVE_HTML[] PROGMEM = R"rawliteral(
         <div class="badge">Success</div>
         <h1>Settings Saved</h1>
         <p>The configuration has been written to flash. Gluvok by Lathey Weigh Trix will now connect to <b>%SSID%</b>.</p>
-        <div class="spinner"></div>
+        <div class="icon">&#10003;</div>
     </div>
 </body>
 </html>
