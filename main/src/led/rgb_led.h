@@ -6,6 +6,9 @@
 // Set to 'true' if common pin is wired to 3.3V / VCC (Common Anode)
 // Set to 'false' if common pin is wired to GND (Common Cathode)
 #define IS_COMMON_ANODE true
+#define RGB_RED_PIN      25
+#define RGB_GREEN_PIN    26
+#define RGB_BLUE_PIN     27
 
 void setupRGBLED();
 void setRGBColor(bool red, bool green, bool blue);
