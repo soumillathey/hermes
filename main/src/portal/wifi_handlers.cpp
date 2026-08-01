@@ -33,15 +33,7 @@ void handleSave() {
   successHtml.replace("%SSID%", wifi_ssid);
   server.send(200, "text/html", successHtml);
 
-  delay(1000);
-  WiFi.softAPdisconnect(true);
-  WiFi.mode(WIFI_OFF);
-  delay(100);
-
-  if (connectToWiFi()) {
-    currentState = STATE_CONNECTED_NORMAL;
-    checkForUpdates();
-  } else {
-    startAPMode();
-  }
+  delay(1500);
+  Serial.println("[Config] Restarting ESP32 to connect with new credentials...");
+  ESP.restart();
 }

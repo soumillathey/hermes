@@ -37,7 +37,7 @@ void setup() {
   runSevenSegmentStartupTest();
   Indicator.begin(1200, SERIAL_8N1, 16, 17); // Scale UART2: RX=16, TX=17
 
-  clearWifiCredentials(); // Force re-entry on every power cycle
+  // clearWifiCredentials(); // Commented out so saved credentials persist
   loadSettings();
 
   if (wifi_ssid.length() > 0) {
