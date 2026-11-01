@@ -34,7 +34,7 @@ def get_wifi_interface() -> str:
     return "wlan0"
 
 
-def run_nmcli(args: list[str], timeout: float = 15.0) -> tuple[int, str]:
+def run_nmcli(args: list[str], timeout: float = 15.0, warn: bool = True) -> tuple[int, str]:
     """Execute nmcli command with exclusive locking."""
     if not is_nmcli_available() or SIMULATION_STATE["enabled"]:
         return 0, "Simulation OK"
@@ -43,7 +43,7 @@ def run_nmcli(args: list[str], timeout: float = 15.0) -> tuple[int, str]:
         try:
             res = subprocess.run(pfx + ["nmcli"] + args, capture_output=True, text=True, timeout=timeout, check=False)
             out = (res.stdout or res.stderr).strip()
-            if res.returncode != 0:
+            if res.returncode != 0 and warn:
                 logger.warning("nmcli error (%d): %s", res.returncode, out)
             return res.returncode, out
         except subprocess.TimeoutExpired:

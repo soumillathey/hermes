@@ -40,6 +40,7 @@ class PortalService:
         return self._active
 
     def stop(self) -> None:
+        if not self._active and not self._dns and not self._http: return
         teardown_nm_capport_config()
         if self._dns: self._dns.stop(); self._dns = None
         if self._http: self._http.stop(); self._http = None

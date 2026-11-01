@@ -34,6 +34,7 @@ class TestWiFiHotspot(unittest.TestCase):
         self.assertTrue(start_hotspot("hermes", "12345678"))
         self.assertTrue(is_hotspot_active())
         self.assertTrue(stop_hotspot())
+        self.assertTrue(stop_hotspot())
         self.assertFalse(is_hotspot_active())
 
     @patch("src.devices.wifi.portal_service.portal_service.start", return_value=True)
@@ -41,6 +42,7 @@ class TestWiFiHotspot(unittest.TestCase):
     def test_emergency_hotspot_lifecycle(self, mock_stop: MagicMock, mock_start: MagicMock) -> None:
         self.assertTrue(start_emergency_hotspot("hermes", "12345678"))
         self.assertTrue(is_hotspot_active())
+        self.assertTrue(stop_emergency_hotspot())
         self.assertTrue(stop_emergency_hotspot())
         self.assertFalse(is_hotspot_active())
 

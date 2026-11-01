@@ -39,7 +39,7 @@ def connect_wifi(ssid: str, password: str = "", iface: str | None = None) -> tup
         runner.SIMULATION_STATE["active_ssid"] = ssid
         return True, f"Connected to '{ssid}'"
     dev = iface or runner.get_wifi_interface()
-    runner.run_nmcli(["connection", "delete", ssid])
+    runner.run_nmcli(["connection", "delete", ssid], warn=False)
     cmd = ["device", "wifi", "connect", ssid, "ifname", dev]
     if password: cmd.extend(["password", password])
     code, out = runner.run_nmcli(cmd, timeout=30.0)
